@@ -1162,8 +1162,3 @@ public interface AuthorMapper {
 ```
 
 总之, 每个映射器方法签名应该匹配相关联的 SqlSession 方法, 而没有字符串参数 ID。 相反,方法名必须匹配映射语句的 ID。
-
-
-
-# Spring
-
