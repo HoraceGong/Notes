@@ -96,12 +96,101 @@ Spring Bean的实例化方式主要有如下两种：
 
 - **工厂方法实例化**：底层通过调用自定义的工厂方法对Bean进行实例化
 
-  静态工厂方法实例化Bean，其实就是定义一个工厂类，提供一个静态方法用于生产Bean实例，再将该工厂类及其静态方法配置给Spring即可
+  **静态工厂方法**实例化Bean，其实就是定义一个工厂类，提供一个静态方法用于生产Bean实例，再将该工厂类及其静态方法配置给Spring即可。**此方法不需要实例化工厂类本身**。
 
   ```xml
-  <bean id="userDao" class="com.itheima.factory.UserDaoFactoryBean" factory-method="getUserDao">
-    <constructor-arg name="name" value="haohao"/>
-  </bean>
+  <bean id="exampleBean" class="com.example.Factory" factory-method="createInstance"/>
+  ```
+  
+  **非静态工厂方法**实例化Bean，需要先创建工厂类的实例（即工厂Bean），然后通过工厂实力调用非静态方法创建Bean。
+
+  ```xml
+  <bean id="factory" class="com.example.Factory"/>
+  <bean id="exampleBean" factory-bean="factory" factory-method="createInstance"/>
+  ```
+  
+
+#### 为什么需要静态工厂方法和非静态工厂方法两种Bean实例化模式？
+
+- 静态工厂方法：
+
+  - 工厂类无需维护状态，所有逻辑通过静态方法实现。
+  - 典型场景：工具类工厂（如`Calendar.getInstance`）
+
+  ```java
+  public class StaticFactory {
+      // 静态方法直接返回Bean实例
+      public static User createUser() {
+          return new User("Admin", 30);
+      }
+  }
   ```
 
+  ```xml
+  // XML配置
+  <bean id="user" class="com.example.StaticFactory" factory-method="createUser"/>
+  ```
+
+- 非静态工厂方法：
+
+  - 工厂类需要维护状态或者依赖其他Bean
+  - 适合需要根据动态条件（如配置参数）生成不同Bean的情况
+
+  ```java
+  public class InstanceFactory {
+      private String role;
   
+      public void setRole(String role) {
+          this.role = role;
+      }
+  
+      // 非静态方法依赖工厂状态
+      public User createUser() {
+          return new User(role, 30);
+      }
+  }
+  ```
+
+  ```xml
+  // XML配置
+  <bean id="instanceFactory" class="com.example.InstanceFactory">
+      <property name="role" value="Guest"/>
+  </bean>
+  
+  <bean id="user" factory-bean="instanceFactory" factory-method="createUser"/>
+  ```
+
+##### 生命周期管理
+
+- 静态工厂方法
+  - 工厂类本身不会被Spring容器管理（不参与依赖注入）。
+  - 静态方法的调用与Spring Bean生命周期无关。
+- 非静态工厂方法：
+  - 工厂Bean由Spring容器管理，可参与依赖注入和生命周期回调（如`@PostConstruct`）
+  - 工厂实例的初始化优先于目标Bean的创建
+
+### Bean的依赖注入方式
+
+- 通过Bean的set方法注入
+  ``` xml
+  <property name="userDao" ref="userDao"/>
+  <property name="userDao" value="haohao"/>
+  ```
+
+- 通过构造Bean的方法进行注入
+
+  ```xml
+  <constructor-arg name="userDao" ref="userDao"/>
+  <constructor-arg name="userDao" value="haohao"/>
+  ```
+
+#### 三种依赖注入的数据类型
+
+- 普通数据类型：String / int / boolean等，通过`value`属性指定
+- 引用数据类型：UserDaoImpl / DataSource等，通过`ref`属性指定
+- 集合数据类型：List / Map / Properties等
+
+
+
+## 基于注解的Spring应用
+
