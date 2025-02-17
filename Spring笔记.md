@@ -194,3 +194,288 @@ Spring Bean的实例化方式主要有如下两种：
 
 ## 基于注解的Spring应用
 
+### @Component
+
+可以通过`@Component`注解的value属性指定当前Bean实例的beanName，也可以省略不写，**不写的情况下为当前类名首字母小写**。
+
+| xml配置                  | 注解           | 描述                                                         |
+| ------------------------ | -------------- | ------------------------------------------------------------ |
+| <bean scope="">          | @Scope         | 在类上或使用了@Bean标注的方法上，标注Bean的作用范围，取值为signlethon或prototype |
+| <bean lazy-init="">      | @Lazy          | 在类上或使用了@Bean标注的方法上，标注Bean是否延迟加载，取值为true和false |
+| <bean init-method="">    | @PostConstruct | 在方法上使用，标注Bean的实例化后执行的方法                   |
+| <bean destroy-method=""> | @PreConstruct  | 在方法上使用，标注Bean的销毁前执行方法                       |
+
+由于JavaEE开发是分层的，为了每层Bean标识的注解语义更加明确，@Component又衍生出如下三个注解：
+
+| @Component衍生注解 | 描述                |
+| ------------------ | ------------------- |
+| @Repository        | 在Dao层类上使用     |
+| @Service           | 在Service层类上使用 |
+| @Controller        | 在Web层类上使用     |
+
+Bean依赖注入的注解，主要是使用注解的方式替代XML的`<property>`标签完成属性的注入操作。Spring主要提供如下注解，用于在Bean内部进行属性注入的：
+
+| 属性注入注解 | 描述                                                 |
+| ------------ | ---------------------------------------------------- |
+| @Value       | 使用在字段或方法上，用于注入普通数据                 |
+| @Autowired   | 使用在字段或方法上，用于根据类型(byType)注入引用数据 |
+| @Qualifier   | 使用在字段或方法上，结合`@Autowired`，根据名称注入   |
+| @Resource    | 使用在字段或方法上，根据类型或者名称进行注入         |
+
+### byType和byName有什么区别？
+
+`byName`：按名称自动装配
+
+- 匹配规则：Spring容器会查找与属性名相同的Bean ID（或名称），完成注入。
+- 特点：
+  - 依赖属性的名称必须与目标Bean的ID完全一致
+  - 不关心类型是否匹配，仅通过名称查找，如果类型不匹配，则抛出异常
+
+示例：
+
+```java
+@Component("userService") // Bean 的 ID 是 "userService"
+public class UserServiceImpl implements UserService {}
+
+public class UserController {
+    @Autowired
+    private UserService userService; // 属性名为 "userService"，与 Bean ID 匹配
+}
+```
+
+`byType`：按类型自动装配
+
+- 匹配规则：Spring容器会查找与属性类型兼容的Bean完成注入。
+- 特点：
+  - 依赖属性的类型必须与容器中某个Bean的类型兼容（可以是实现类或者其父类/接口）
+  - 如果容器中存在多个相同类型的Bean，会抛出`NoUniqueBeanDefinitionException`，此时需要配合`@Qualifier`指定具体的Bean名称
+
+示例：
+
+```java
+@Component // 默认 Bean 名称是 "userServiceImpl"
+public class UserServiceImpl implements UserService {}
+
+public class UserController {
+    @Autowired // 按类型匹配（UserService 接口）
+    private UserService userService; 
+}
+```
+
+### @Resource和@Autowired的区别
+
+1. **来源不同**：
+
+   - **@Autowired**：由 Spring 框架提供，属于 `org.springframework.beans.factory.annotation` 包。
+   - **@Resource**：由 Java 标准（JSR-250）定义，属于 `javax.annotation` 包。
+
+2. **默认注入方式**：
+
+   - **@Autowired**：
+     - **按类型注入（byType）**。
+     - 若存在多个同类型的 Bean，需配合 `@Qualifier` 指定名称。
+   - **@Resource**：
+     - **按名称注入（byName）**。
+     - 若未指定 `name`，则优先按字段名/方法名匹配 Bean 名称，失败后回退到按类型匹配。
+
+3. **指定 Bean 名称的方式**：
+
+   - **@Autowired**：
+
+     - 需结合 `@Qualifier("beanName")` 显式指定名称。
+
+     ```java
+     @Autowired
+     @Qualifier("userServiceImplA")
+     private UserService userService;
+     ```
+
+   - **@Resource**：
+
+     - 直接通过 `name` 属性指定 Bean 名称。
+
+     ```java
+     @Resource(name = "userServiceImplA")
+     private UserService userService;
+     ```
+
+4. **适用范围**：
+
+   - **@Autowired**：
+     - 支持构造器、方法、字段、参数注入。
+     - 常用于 Spring 生态项目。
+   - **@Resource**：
+     - 通常用于字段和方法注入，不支持构造器注入。
+     - 作为 Java 标准注解，兼容性更好（如 Jakarta EE 环境）。
+
+5. **依赖处理**：
+
+   - **@Autowired**：
+     - 默认必须注入（`required=true`），若找不到匹配的 Bean 会报错。
+     - 可设置为非必需：`@Autowired(required = false)`。
+   - **@Resource**：
+     - 默认必须注入，若找不到 Bean 会抛出异常，无法设置非必需。
+
+6. **多 Bean 冲突处理**：
+
+   - **@Autowired**：
+
+     - 同一类型存在多个 Bean 时，必须通过 `@Qualifier` 解决歧义。
+
+     ```java
+     @Autowired
+     @Qualifier("mysqlDataSource")
+     private DataSource dataSource;
+     ```
+
+   - **@Resource**：
+
+     - 优先按名称匹配，无需额外注解即可避免歧义（若字段名与 Bean 名称一致）。
+
+     ```java
+     @Resource // 字段名 dataSource 需与 Bean 名称一致
+     private DataSource dataSource;
+     ```
+
+7. **依赖包要求**：
+
+   - **@Autowired**：需引入 Spring 相关依赖（如 `spring-boot-starter`）。
+   - **@Resource**：需引入 `javax.annotation-api` 依赖（Java 11 后需手动添加）。
+
+**使用场景对比**
+
+| **场景**               | **推荐注解** | **说明**                                                     |
+| :--------------------- | :----------- | :----------------------------------------------------------- |
+| 需要与 Spring 解耦     | @Resource    | 使用 Java 标准注解，便于迁移到其他框架。                     |
+| 需要构造器注入         | @Autowired   | `@Resource` 不支持构造器注入。                               |
+| 存在多个同类型 Bean    | @Resource    | 通过名称直接指定更简洁；或结合 `@Qualifier` 使用 `@Autowired`。 |
+| 需要非必需依赖         | @Autowired   | 支持 `required=false`，允许依赖不存在。                      |
+| 字段名与 Bean 名称一致 | @Resource    | 无需显式指定名称，代码更简洁。                               |
+
+**示例代码**
+
+1. **使用 @Autowired**：
+
+   ```java
+   @Service
+   public class UserService {
+       @Autowired
+       @Qualifier("jdbcUserRepository")
+       private UserRepository userRepository;
+   }
+   ```
+
+2. **使用 @Resource**：
+
+   ```java
+   @Service
+   public class UserService {
+       @Resource(name = "jdbcUserRepository")
+       private UserRepository userRepository;
+   }
+   ```
+
+**总结**
+
+- **优先使用 @Autowired**：在纯 Spring 项目中，结合 `@Qualifier` 处理复杂依赖。
+- **选择 @Resource**：需兼容 Java 标准或简化名称匹配时。
+
+### @Bean注解的作用
+
+`@Bean` 注解是 Spring 框架中用于显式声明和配置 Bean 的核心注解，通常用在 **配置类的方法** 上。它的核心作用是告诉 Spring：**该方法返回的对象需要被注册为 Spring 容器中的一个 Bean**，并由容器管理其生命周期和依赖注入。
+
+核心作用：
+
+- 显式定义第三方库或复杂对象的Bean
+  当需要将无法修改源码的类（比如第三方库中的类）或**需要复杂初始化逻辑的对象**注册为Bean时，`@Bean`是唯一的选择
+
+  ```java
+  @Configuration
+  public class AppConfig {
+      @Bean
+      public DataSource dataSource() {
+          HikariDataSource dataSource = new HikariDataSource();
+          dataSource.setJdbcUrl("jdbc:mysql://localhost:3306/test");
+          dataSource.setUsername("root");
+          dataSource.setPassword("123456");
+          return dataSource;
+      }
+  }
+  ```
+
+- 自定义Bean的初始化逻辑
+  `@Bean`方法中可以编写任意代码，**灵活控制对象的创建和初始化**。
+
+  ```java
+  @Bean
+  public MyService myService() {
+      if (isProduction()) {
+          return new ProductionService();
+      } else {
+          return new DevelopmentService();
+      }
+  }
+  ```
+
+### Bean配置类的注解开发
+
+`@Configuration`注解标识的类为配置类，替代原有xml配置文件，该注解第一个作用是标识该类是一个配置类，第二个作用是具备`@Component`作用。
+
+```java
+@Configuration
+public class ApplicationContextConfig{}
+```
+
+`@ComponentScan`组件扫描配置，替代原有xml文件中的`<context:component-scan base-package=""/>`。
+
+```java
+@Configuration
+@ComponentScan({"com.example.service","com.example.dao"})
+public class ApplicationContextConfig{}
+```
+
+base-package的配置方式：
+
+- 指定一个或多个包名：扫描指定包及其子包下使用注解的类
+- 不配置包名：扫描当前`@ComponentScan`注解配置类所在包及其子包下的类
+
+`@PropertySource`注解用于加载外部properties资源配置，代替原有的`<context:property-placeholder location=""/>`配置
+
+```java
+@Configuration
+@ComponentScan
+@PropertySource("classpath:jdbc.properties","classpath:xxx.properties")
+public class ApplicationContextConfig{}
+```
+
+`@Import`用于加载其他配置类，替代原有xml中的`<import resource="classpath:beans.xml"/>`配置
+
+```java
+@Configuration
+@ComponentScan
+@PropertySource("classpath:jdbc.properties","classpath:xxx.properties")
+@Import(OtherConfig.class)
+public class ApplicationContextConfig{}
+```
+
+`@Primary`注解用于标注相同类型的Bean优先被使用权，@Primary是Spring3.0引入的，与@Component和@Bean一起使用，标注该Bean的优先级更高，则在通过类型获取Bean或通过@Autowired根据类型进行注入时，会选用优先级更高的。@Primary注解可以用于解决多个实现类之间的选择问题。当一个接口有多个实现类时，可以使用@Primary注解来指定其中一个实现类作为首选的候选对象。例如：
+
+```java
+@Primary  
+@Component  
+public class PrimaryServiceImpl implements Service {  
+    // 实现细节  
+}
+```
+
+在上面的示例中，@Primary注解指示Spring容器在初始化时优先选择PrimaryServiceImpl实例作为Service接口的实现对象。
+
+`@Profile`注解的作用等同于xml配置时的profile属性，是进行环境切换用的：`<beans profile="test">`。注解@Profile标注在类或方法上，标注当前产生的Bean从属于哪个环境，只有激活了当前环境，被标注的Bean才能被注册到Spring容器里，不指定环境的Bean，任何环境下都能注册到Spring容器里。
+
+
+
+# AOP
+
+
+
+# Spring事务
