@@ -296,3 +296,41 @@ EXPLAIN执行计划中各个字段的含义：
 
 # SQL优化
 
+## 插入数据
+
+如果我们需要一次性往数据库表中插入多条记录，可以从以下三个方面优化：
+
+- 批量插入数据
+  ```sql
+  insert into tb_test values(1,'Tom'),(2,'Cat'),(3,'Jerry');
+  ```
+
+- 手动控制事务
+  ```sql
+  start transaction;
+  
+  insert into tb_test values(1,'Tom'),(2,'Cat'),(3,'Jerry');
+  insert into tb_test values(4,'Tom'),(5,'Cat'),(6,'Jerry');
+  
+  commit;
+  ```
+
+- 主键顺序插入，性能高于乱序插入
+
+### 大批量插入数据
+
+如果要一次性插入大批量数据（比如几百万条记录），使用insert语句插入性能较低，此时可以使用MySQL数据库提供的load指令进行插入。
+
+## （待补充）主键优化
+
+
+
+## order by优化
+
+**MySQL的排序，有两种方式：**
+
+- `Using filesort`：通过表的索引或全表扫描，读取满足条件的数据行，然后在排序缓冲区sort buffer中完成排序操作。**所有不是通过索引直接返回排序的结果的排序都叫FileSort排序。**
+- `Using index`：通过有序索引顺序扫描直接返回有序数据，这种情况即为using index，不需要额外排序，效率更高。
+
+对于以上两种方式，Using index性能更高，而Using filesort的性能低，我们在优化排序操作时，**要尽量优化为Using index**。
+
