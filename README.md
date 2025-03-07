@@ -15,6 +15,8 @@
 
 # Java基础
 
+[Java基础笔记](./Java基础笔记.md)
+
 [Java集合笔记](./Java集合笔记.md)
 
 [Java异常笔记](./Java异常笔记.md)
