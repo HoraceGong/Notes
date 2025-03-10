@@ -65,6 +65,8 @@
 
 [Redis基础笔记](./Redis基础笔记.md)
 
+[Redis强化笔记](./Redis强化笔记.md)
+
 # 容器系列
 
 [Docker笔记](./Docker笔记.md)
