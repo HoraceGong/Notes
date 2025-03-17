@@ -43,6 +43,8 @@
 
 [MyBatis笔记](./MyBatis笔记.md)
 
+[MyBatis面试题](./MyBatis面试题·.md)
+
 # Spring系列
 
 [Spring Security & JWT笔记](./Spring Security & JWT笔记.md)
