@@ -71,6 +71,8 @@
 
 [Redis事务笔记](./Redis事务笔记)
 
+[Redis高可用笔记](./Redis高可用.md)
+
 # 容器系列
 
 [Docker笔记](./Docker笔记.md)
