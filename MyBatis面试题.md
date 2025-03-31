@@ -247,7 +247,39 @@ SELECT * FROM ${tableName}
 
 ## 一级缓存
 
+为解决同一SqlSession中可能存在的**反复执行相同查询语句**导致的反复查询数据库相同内容造成的资源浪费问题，MyBatis在SqlSession对象中建立一个简单的缓存，将每次查询到的结果缓存起来，如果下场有相同的查询，可以直接通过缓存返回查询内容。
 
+### 作用范围
+
+- **默认开启**，生命周期与SqlSession绑定
+- 当执行`commit()`、`close()`或增删改操作时，缓存会自动清空
+
+### 工作原理
+
+- **缓存key**：由SQL语句、参数、分页参数等生成唯一标识
+- **查询流程**：
+  1. 执行查询时，先检查一级缓存是否存在匹配结果
+  2. 存在则直接返回缓存数据，否则查询数据库并缓存结果
+
+### 示例
+
+```java
+SqlSession sqlSession = sqlSessionFactory.openSession();
+UserMapper mapper = sqlSession.getMapper(UserMapper.class);
+
+// 第一次查询（访问数据库）
+User user1 = mapper.selectUserById(1); 
+
+// 第二次查询（命中一级缓存）
+User user2 = mapper.selectUserById(1); 
+
+sqlSession.commit(); // 清空缓存
+```
+
+### 注意事项
+
+- **脏数据风险**：若手动修改数据库绕过MyBatis，可能导致缓存与数据库不一致。
+- **作用域限制**：不同`SqlSession`的缓存互相隔离。
 
 ## 二级缓存
 
