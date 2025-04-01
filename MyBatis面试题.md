@@ -4,6 +4,8 @@ MyBatis 是一个持久层框架，简化了 SQL 操作。它**不完全是 ORM�
 
 ## MyBatis架构
 
+来源：https://pdai.tech/md/framework/orm-mybatis/mybatis-y-arch.html
+
 ![img](MyBatis面试题.assets/mybatis-y-arch-1.png)
 
 ### **接口层**
@@ -283,19 +285,276 @@ sqlSession.commit(); // 清空缓存
 
 ## 二级缓存
 
+二级缓存是Application级别的缓存，但二级缓存并非在Application中只用一个Cache缓存，而是每一个Mapper可以拥有一个Cache缓存。
 
+### 作用范围
+
+- **手动开启**，作用域为`Mapper`接口或XML命名空间，跨`SqlSession`共享。
+- 生命周期与应用同步，直到显式清楚或缓存策略过期。
+
+### 配置步骤
+
+1. **全局启用**（`mybatis-config.xml`）：
+
+   ```xml
+   <settings>
+       <setting name="cacheEnabled" value="true"/>
+   </settings>
+   ```
+
+2. **Mapper文件启用**（添加 `<cache/>` 标签）：
+
+   ```xml
+   <mapper namespace="com.example.UserMapper">
+       <cache eviction="LRU" flushInterval="60000" size="1024"/>
+   </mapper>
+   ```
+
+### 缓存策略参数
+
+| 参数            | 说明                                                         |
+| :-------------- | :----------------------------------------------------------- |
+| `eviction`      | 缓存淘汰策略（LRU、FIFO、SOFT、WEAK）                        |
+| `flushInterval` | 缓存刷新间隔（毫秒）                                         |
+| `size`          | 缓存最大对象数                                               |
+| `readOnly`      | 是否只读（`true`：返回缓存对象的引用；`false`：返回深拷贝副本） |
+
+### 示例
+
+```java
+// SqlSession1 查询并提交（数据进入二级缓存）
+SqlSession session1 = sqlSessionFactory.openSession();
+User user1 = session1.getMapper(UserMapper.class).selectUserById(1);
+session1.commit();
+session1.close();
+
+// SqlSession2 直接命中二级缓存
+SqlSession session2 = sqlSessionFactory.openSession();
+User user2 = session2.getMapper(UserMapper.class).selectUserById(1);
+session2.close();
+```
+
+### 注意事项
+
+- **序列化要求**：缓存对象需实现 `Serializable` 接口。
+- **事务提交后生效**：只有 `SqlSession` 提交后，数据才会写入二级缓存。
+- **避免关联查询循环引用**：复杂对象可能导致序列化失败或缓存膨胀。
 
 # MyBatis是如何进行分页的？分页的原理是什么？
 
-## 逻辑分页与物理分页
+## 逻辑分页
+
+逻辑分页指从数据库**查询全部数据**到应用层（如Java内存），再通过代码截取当前页的数据。分页逻辑**完全由应用程序处理**，与数据库无关。
+
+### 实现原理
+
+1. 执行一条未分页的 SQL（如 `SELECT * FROM table`），获取所有数据。
+2. 将数据加载到内存中。
+3. 通过代码截取指定范围的数据（如 `List.subList()`）。
+
+### 示例代码
+
+```java
+List<User> allUsers = userMapper.selectAll(); // 查询全部数据
+int pageNum = 2; // 第2页
+int pageSize = 10; // 每页10条
+
+// 截取当前页数据（假设索引从0开始）
+List<User> pageData = allUsers.subList(
+    (pageNum-1) * pageSize, 
+    Math.min(pageNum * pageSize, allUsers.size())
+);
+```
+
+### 优点
+
+- **实现简单**：无需处理复杂的分页 SQL。
+- **跨数据库兼容**：不依赖数据库的分页语法。
+
+### 缺点
+
+- **性能极差**：数据量大时，查询和传输全部数据会占用大量内存和网络带宽。
+- **不适合生产环境**：仅适用于小数据量测试或管理后台。
+
+## 物理分页
+
+物理分页是指在**数据库层面**直接按分页条件查询，仅返回当前页的数据。分页逻辑**由数据库处理**，应用层仅获取所需数据。
+
+### 实现原理
+
+1. 在 SQL 中添加分页关键字（如 `LIMIT`、`OFFSET`、`ROWNUM`）。
+2. 数据库仅执行分页查询，返回指定范围内的数据。
+
+### 示例代码
+
+```sql
+-- MySQL
+SELECT * FROM user LIMIT 10 OFFSET 20; -- 第3页（每页10条）
+```
+
+### 优点
+
+- **高性能**：仅传输和处理当前页数据，节省内存和网络资源。
+- **适合生产环境**：支持大数据量场景。
+
+### 缺点
+
+- **SQL复杂度高**：需要编写数据库特定的分页语法。
+- **深度分页性能问题**：偏移量`OFFSET`过大时，数据库仍需扫描大量数据（可以通过游标分页优化）。
+
+### 物理分页的优化技巧
+
+1. 避免深度分页
+
+- **问题**：`LIMIT 100000, 10` 会导致数据库扫描前 100010 行。
+
+- **优化方案**：使用 **游标分页**（基于排序字段和上一页最后一条数据的值）：
+
+  ```sql
+  -- 传统分页（性能差）
+  SELECT * FROM user ORDER BY id LIMIT 100000, 10;
+  
+  -- 游标分页（性能高）
+  SELECT * FROM user 
+  WHERE id > #{lastId}  -- 上一页最后一条数据的id
+  ORDER BY id 
+  LIMIT 10;
+  ```
+
+2. 索引优化
+
+- 确保 `ORDER BY` 和 `WHERE` 条件中的字段有索引。
+- 避免全表扫描，提升分页查询速度。
+
+3. 分页插件
+
+- 使用 MyBatis 插件（如 **PageHelper**）自动生成物理分页 SQL，简化开发：
+
+  ```java
+  PageHelper.startPage(2, 10); // 第2页，每页10条
+  List<User> users = userMapper.selectAll();
+  ```
+
+## MyBatis分页的常见方式
+
+### 手动编写SQL分页
+
+直接在 SQL 中拼接分页语法（如 MySQL 的 `LIMIT`）：
+
+```xml
+<select id="selectUsersByPage" resultType="User">
+    SELECT * FROM user
+    LIMIT #{offset}, #{pageSize}
+</select>
+```
+
+- **优点**：简单直接，性能高。
+- **缺点**：需要处理不同数据库的分页语法差异，代码冗余。
+
+### 使用分页插件
+
+通过拦截器动态修改 SQL，自动添加分页语法，并封装分页结果。
+**示例代码**：
+
+```java
+// 启动分页（页码=1，每页10条）
+PageHelper.startPage(1, 10);
+List<User> users = userMapper.selectAllUsers();
+PageInfo<User> pageInfo = new PageInfo<>(users);
+```
+
+- **优点**：无需手动处理分页逻辑，支持多数据库。
+- **缺点**：依赖插件，需理解其拦截机制。
+
+### 逻辑分页（最不推荐）
+
+查询全部数据后，通过代码截取分页结果：
+
+```java
+List<User> allUsers = userMapper.selectAllUsers();
+List<User> pageData = allUsers.subList((pageNum-1)*pageSize, pageNum*pageSize);
+```
+
+- **优点**：实现简单。
+- **缺点**：数据量大时性能极差，不推荐使用。
+
+## PageHelper的核心原理
+
+1. **分页参数绑定**
+
+- 调用 `PageHelper.startPage(pageNum, pageSize)`，将分页参数（页码、每页条数）存储到 **`ThreadLocal`** 中，确保线程安全。
+
+- **代码示例**：
+
+  ```java
+  // 分页参数存储到当前线程
+  Page<?> page = PageHelper.startPage(1, 10);
+  ```
+
+2. **拦截 SQL 执行**
+
+- 插件通过实现 MyBatis 的 `Interceptor` 接口，拦截 `Executor` 的 `query` 方法。
+- **拦截逻辑**：
+  1. 检测当前线程是否存在分页参数。
+  2. 存在分页参数时，修改原始 SQL，添加分页语法。
+
+3. **生成分页 SQL**
+
+- 根据数据库类型（如 MySQL、Oracle）生成对应的分页语句：
+
+  - **MySQL**：
+
+    ```sql
+    -- 原始 SQL
+    SELECT * FROM user;
+    -- 分页 SQL
+    SELECT * FROM user LIMIT 0, 10;
+    ```
+
+  - **Oracle**：
+
+    ```sql
+    -- 原始 SQL
+    SELECT * FROM user;
+    -- 分页 SQL
+    SELECT * FROM (
+        SELECT tmp.*, ROWNUM row_id FROM (
+            SELECT * FROM user
+        ) tmp WHERE ROWNUM <= 10
+    ) WHERE row_id > 0;
+    ```
+
+4. **查询总记录数**
+
+- 自动执行一条 **`COUNT` 查询**，获取满足条件的总记录数：
+
+  ```sql
+  SELECT COUNT(*) FROM user;
+  ```
+
+- **优化**：若 SQL 包含 `GROUP BY`，则改写为统计临时表记录数：
+
+  ```sql
+  SELECT COUNT(*) FROM (原始SQL) tmp;
+  ```
+
+5. **封装分页结果**
+
+- 将分页数据（当前页数据、总记录数、总页数等）封装到 `PageInfo` 对象：
+
+  ```java
+  PageInfo<User> pageInfo = new PageInfo<>(users);
+  System.out.println("总记录数：" + pageInfo.getTotal());
+  System.out.println("总页数：" + pageInfo.getPages());
+  ```
 
 # 简述MyBatis的插件运行原理，以及如何编写一个插件
+
+来源：https://pdai.tech/md/framework/orm-mybatis/mybatis-y-plugin.html
 
 
 
 # MyBatis动态SQL是做什么的？都有哪些动态SQL？简述一下原理？
-
-
 
 
 
